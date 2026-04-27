@@ -1,0 +1,100 @@
+version: "3.9"
+
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: secure_docs_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: secure_docs
+    ports:
+      - "3306:3306"
+
+  document-service:
+    build: ./document-service
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mysql
+    environment:
+      DATABASE_URL: mysql+pymysql://root:root@mysql:3306/secure_docs
+      SECRET_KEY: supersecretkey
+      ALGORITHM: HS256
+    volumes:
+      - uploads_data:/app/uploads
+
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    environment:
+      DATABASE_URL: mysql+pymysql://root:root@mysql:3306/secure_docs
+      SECRET_KEY: supersecretkey
+      ALGORITHM: HS256
+
+  similarity-service:
+    build: ./similarity-service
+    ports:
+      - "8002:8002"
+    depends_on:
+      - mysql
+      - document-service
+    environment:
+      DATABASE_URL: mysql+pymysql://root:root@mysql:3306/secure_docs
+      SECRET_KEY: supersecretkey
+      ALGORITHM: HS256
+    volumes:
+      - uploads_data:/app/uploads
+
+  verification-service:
+    build: ./verification-service
+    ports:
+      - "8003:8003"
+    depends_on:
+      - mysql
+      - document-service
+    environment:
+      DATABASE_URL: mysql+pymysql://root:root@mysql:3306/secure_docs
+      SECRET_KEY: supersecretkey
+      ALGORITHM: HS256
+    volumes:
+      - uploads_data:/app/uploads
+
+  report-service:
+    build: ./report-service
+    ports:
+      - "8004:8004"
+    depends_on:
+      - document-service
+      - verification-service
+      - similarity-service
+    environment:
+      SECRET_KEY: supersecretkey
+      ALGORITHM: HS256
+      DOCUMENT_SERVICE_URL: http://document-service:8001
+      VERIFICATION_SERVICE_URL: http://verification-service:8003
+      SIMILARITY_SERVICE_URL: http://similarity-service:8002
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "9000:9000"
+    depends_on:
+      - auth-service
+      - document-service
+      - similarity-service
+      - verification-service
+      - report-service
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
+      DOCUMENT_SERVICE_URL: http://document-service:8001
+      SIMILARITY_SERVICE_URL: http://similarity-service:8002
+      VERIFICATION_SERVICE_URL: http://verification-service:8003
+      REPORT_SERVICE_URL: http://report-service:8004
+
+volumes:
+  uploads_data:
